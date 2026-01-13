@@ -29,6 +29,9 @@ class Baby(Base):
     liked_ingredients = Column(JSON, default=list)  # Ingredients baby enjoys
     disliked_ingredients = Column(JSON, default=list)  # Ingredients baby dislikes
 
+    # Ingredients tried with feedback
+    tried_ingredients = Column(JSON, default=dict)  # e.g., # {"carrot": {"attempts": 3, "accepted": 1, "last_try": "2024-01-10", "methods_tried": ["pureed", "steamed"], "methods_liked": ["roasted"]}}
+
     # Metadata
     created_at = Column(Date, default=date.today)
 
