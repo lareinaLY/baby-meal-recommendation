@@ -1,7 +1,6 @@
 """
 Smart Recommendation Engine with intelligent preference handling.
-
-Key: All return values must match Pydantic schemas exactly.
+Complete fixed version with debug output.
 """
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
@@ -34,14 +33,21 @@ class SmartRecommendationEngine:
         
         Returns dict matching SmartRecommendationResponse schema.
         """
+        print(f"\n{'='*60}")
+        print(f"Smart Recommendations for {baby.name} ({baby.get_age_months()} months)")
+        print(f"{'='*60}")
+        
         # Get primary recommendations
         primary_recs = self._get_primary_recommendations(baby, count, meal_type)
+        print(f"✓ Primary recommendations: {len(primary_recs)}")
         
         # Get alternatives for disliked ingredients
         alternatives = self._get_alternatives_for_dislikes(baby)
+        print(f"✓ Alternatives for: {list(alternatives.keys())}")
         
         # Get retry suggestions
         retry_suggestions = self._get_retry_suggestions(baby)
+        print(f"✓ Retry suggestions: {len(retry_suggestions)}")
         
         # Generate overall explanation
         if self.llm_service:
@@ -49,11 +55,14 @@ class SmartRecommendationEngine:
                 overall_explanation = self._generate_overall_explanation(
                     baby, primary_recs, alternatives
                 )
+                print(f"✓ LLM explanation generated")
             except Exception as e:
                 print(f"⚠️ LLM explanation failed: {e}")
                 overall_explanation = f"Personalized recommendations for {baby.name}."
         else:
             overall_explanation = f"Personalized recommendations for {baby.name} based on age and preferences."
+        
+        print(f"{'='*60}\n")
         
         return {
             "primary_recommendations": primary_recs,
@@ -70,13 +79,19 @@ class SmartRecommendationEngine:
         meal_type: str
     ) -> List[Dict]:
         """Get primary recommendations with soft penalties."""
-        # Get candidates
+        # Get candidates - no exclude to ensure we get results
         candidates = self.rule_engine.get_recommendations(
             baby=baby,
-            count=count * 2,
+            count=count * 3,  # Get more candidates for better selection
             meal_type=meal_type,
-            exclude_recent_days=7
+            exclude_recent_days=0  # Don't exclude recent for now
         )
+        
+        print(f"  Rule engine returned {len(candidates)} candidates")
+        
+        if not candidates:
+            print("  ⚠️ No candidates! Check database has recipes.")
+            return []
         
         enhanced_recommendations = []
         
@@ -84,6 +99,8 @@ class SmartRecommendationEngine:
             # Calculate preference penalty
             penalty = self.preference_handler.calculate_preference_penalty(recipe, baby)
             adjusted_score = base_score * penalty
+            
+            print(f"    {recipe.name[:30]:30} base={base_score:.3f} penalty={penalty:.2f} final={adjusted_score:.3f}")
             
             # Check if retry
             is_retry = self._is_retry_recommendation(recipe, baby)
@@ -95,12 +112,12 @@ class SmartRecommendationEngine:
                         recipe, baby, reason
                     )
                 except Exception as e:
-                    print(f"⚠️ LLM explanation failed: {e}")
+                    print(f"    ⚠️ LLM failed for {recipe.name}: {e}")
                     explanation = reason
             else:
                 explanation = reason
             
-            # Serialize recipe to dict
+            # Serialize recipe
             recipe_dict = self._serialize_recipe(recipe)
             
             enhanced_recommendations.append({
@@ -113,15 +130,21 @@ class SmartRecommendationEngine:
                 "nutritional_highlights": None
             })
         
-        # Sort and return top N
+        # Sort by adjusted score
         enhanced_recommendations.sort(key=lambda x: x['score'], reverse=True)
-        return enhanced_recommendations[:count]
+        
+        final = enhanced_recommendations[:count]
+        print(f"  Selected top {len(final)} after sorting")
+        
+        return final
     
     def _get_alternatives_for_dislikes(self, baby: Baby) -> Dict[str, Any]:
         """Get alternatives for each disliked ingredient."""
         alternatives_dict = {}
         
         for disliked in (baby.disliked_ingredients or []):
+            print(f"  Finding alternatives for '{disliked}'...")
+            
             # Find nutritional alternatives
             alt_recipes = self.preference_handler.find_nutritional_alternatives(
                 disliked, baby
@@ -151,7 +174,7 @@ class SmartRecommendationEngine:
                         reason="baby_refused"
                     )
                 except Exception as e:
-                    print(f"⚠️ LLM alternatives failed: {e}")
+                    print(f"    ⚠️ LLM alternatives failed: {e}")
                     llm_suggestions = []
             else:
                 llm_suggestions = []
@@ -162,6 +185,8 @@ class SmartRecommendationEngine:
                 "alternative_recipes": alternative_recipes_formatted,
                 "llm_suggestions": llm_suggestions
             }
+            
+            print(f"    Found {len(alternative_recipes_formatted)} recipes, {len(llm_suggestions)} LLM suggestions")
         
         return alternatives_dict
     
@@ -175,12 +200,14 @@ class SmartRecommendationEngine:
             )
             
             if should_retry:
+                print(f"  Generating retry strategy for '{disliked}'...")
+                
                 # Get different preparations
                 different_preps = self.preference_handler.suggest_different_preparations(
                     disliked, baby
                 )
                 
-                # Format as list of strings (simplified)
+                # Format as list of strings
                 different_preps_formatted = [
                     f"{recipe.name} ({method})"
                     for recipe, method in different_preps
@@ -195,10 +222,10 @@ class SmartRecommendationEngine:
                             disliked, baby, attempt_count
                         )
                     except Exception as e:
-                        print(f"⚠️ Retry strategy generation failed: {e}")
-                        retry_strategy = {"strategy": "Try different preparation"}
+                        print(f"    ⚠️ Retry strategy generation failed: {e}")
+                        retry_strategy = {"strategy": "Try different preparation", "rationale": "Progressive exposure"}
                 else:
-                    retry_strategy = {"strategy": "Try different preparation"}
+                    retry_strategy = {"strategy": "Try different preparation", "rationale": "Progressive exposure"}
                 
                 retry_suggestions.append({
                     "ingredient": disliked,
