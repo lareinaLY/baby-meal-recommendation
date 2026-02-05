@@ -1,136 +1,98 @@
 """
-API routes for baby profile management.
+Baby management API routes with user authentication
 """
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List
 
 from app.core.database import get_db
+from app.core.auth import get_current_user
+from app.models.user import User
 from app.models.baby import Baby
-from app.models.feedback import Feedback
-from app.schemas.baby import (
-    BabyCreate,
-    BabyUpdate,
-    BabyResponse,
-    BabyWithStats
-)
+from app.schemas.baby import BabyCreate, BabyUpdate, BabyResponse, BabyWithStats
 
 router = APIRouter()
 
 
 @router.post("/", response_model=BabyResponse, status_code=status.HTTP_201_CREATED)
 def create_baby(
-        baby_data: BabyCreate,
-        db: Session = Depends(get_db)
+    baby: BabyCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Create a new baby profile.
-
-    Args:
-        baby_data: Baby profile information
-
-    Returns:
-        Created baby profile with computed fields
+    Create a new baby profile for the current user
+    
+    Requires authentication
     """
-    # Create baby instance
-    baby = Baby(**baby_data.model_dump())
-
-    db.add(baby)
+    # Create baby associated with current user
+    db_baby = Baby(
+        user_id=current_user.id,
+        name=baby.name,
+        birth_date=baby.birth_date,
+        weight_kg=baby.weight_kg,
+        height_cm=baby.height_cm,
+        allergies=baby.allergies,
+        liked_ingredients=baby.liked_ingredients,
+        disliked_ingredients=baby.disliked_ingredients
+    )
+    db.add(db_baby)
     db.commit()
-    db.refresh(baby)
-
-    # Manually construct response with computed fields
-    baby_dict = {
-        "id": baby.id,
-        "name": baby.name,
-        "birth_date": baby.birth_date,
-        "weight_kg": baby.weight_kg,
-        "height_cm": baby.height_cm,
-        "allergies": baby.allergies,
-        "dietary_restrictions": baby.dietary_restrictions,
-        "liked_ingredients": baby.liked_ingredients,
-        "disliked_ingredients": baby.disliked_ingredients,
-        "created_at": baby.created_at,
-        "age_months": baby.get_age_months(),
-        "age_stage": baby.get_age_stage()
-    }
-
-    return BabyResponse(**baby_dict)
+    db.refresh(db_baby)
+    
+    return db_baby
 
 
 @router.get("/", response_model=List[BabyResponse])
 def list_babies(
-        skip: int = 0,
-        limit: int = 100,
-        db: Session = Depends(get_db)
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    List all baby profiles with pagination.
-
-    Args:
-        skip: Number of records to skip
-        limit: Maximum number of records to return
-
-    Returns:
-        List of baby profiles
+    List all babies for the current user
+    
+    Requires authentication. Only returns babies owned by the current user.
     """
-    babies = db.query(Baby).offset(skip).limit(limit).all()
-
-    # Manually construct responses with computed fields
-    responses = []
-    for baby in babies:
-        baby_dict = {
-            "id": baby.id,
-            "name": baby.name,
-            "birth_date": baby.birth_date,
-            "weight_kg": baby.weight_kg,
-            "height_cm": baby.height_cm,
-            "allergies": baby.allergies,
-            "dietary_restrictions": baby.dietary_restrictions,
-            "liked_ingredients": baby.liked_ingredients,
-            "disliked_ingredients": baby.disliked_ingredients,
-            "created_at": baby.created_at,
-            "age_months": baby.get_age_months(),
-            "age_stage": baby.get_age_stage()
-        }
-        responses.append(BabyResponse(**baby_dict))
-
-    return responses
+    babies = db.query(Baby).filter(
+        Baby.user_id == current_user.id
+    ).offset(skip).limit(limit).all()
+    
+    return babies
 
 
 @router.get("/{baby_id}", response_model=BabyWithStats)
 def get_baby(
-        baby_id: int,
-        db: Session = Depends(get_db)
+    baby_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get a specific baby profile by ID with statistics.
-
-    Args:
-        baby_id: Baby profile ID
-
-    Returns:
-        Baby profile with feedback statistics
+    Get a specific baby's details with statistics
+    
+    Requires authentication. Users can only access their own babies.
     """
-    baby = db.query(Baby).filter(Baby.id == baby_id).first()
-
+    baby = db.query(Baby).filter(
+        Baby.id == baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
-
+    
     # Calculate statistics
-    feedbacks = db.query(Feedback).filter(Feedback.baby_id == baby_id)
-
-    total_feedbacks = feedbacks.count()
-    accepted_count = feedbacks.filter(Feedback.accepted == True).count()
-    avg_rating = feedbacks.filter(Feedback.accepted == True).with_entities(
-        func.avg(Feedback.rating)
-    ).scalar() or 0.0
-
-    # Manually construct response with stats
+    total_feedbacks = len(baby.feedbacks)
+    accepted_count = sum(1 for f in baby.feedbacks if f.accepted)
+    avg_rating = sum(f.rating for f in baby.feedbacks) / total_feedbacks if total_feedbacks > 0 else 0.0
+    
+    # Calculate acceptance rate
+    acceptance_rate = (accepted_count / total_feedbacks * 100) if total_feedbacks > 0 else 0.0
+    
+    # Create response with stats
     baby_dict = {
         "id": baby.id,
         "name": baby.name,
@@ -138,91 +100,76 @@ def get_baby(
         "weight_kg": baby.weight_kg,
         "height_cm": baby.height_cm,
         "allergies": baby.allergies,
-        "dietary_restrictions": baby.dietary_restrictions,
         "liked_ingredients": baby.liked_ingredients,
         "disliked_ingredients": baby.disliked_ingredients,
         "created_at": baby.created_at,
-        "age_months": baby.get_age_months(),
+        "age_months": baby.age_months,
         "age_stage": baby.get_age_stage(),
         "total_feedbacks": total_feedbacks,
         "average_rating": round(avg_rating, 2),
-        "acceptance_rate": round(accepted_count / total_feedbacks, 2) if total_feedbacks > 0 else 0.0
+        "acceptance_rate": round(acceptance_rate, 1)
     }
-
-    return BabyWithStats(**baby_dict)
+    
+    return baby_dict
 
 
 @router.patch("/{baby_id}", response_model=BabyResponse)
 def update_baby(
-        baby_id: int,
-        baby_data: BabyUpdate,
-        db: Session = Depends(get_db)
+    baby_id: int,
+    baby_update: BabyUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Update a baby profile.
-
-    Args:
-        baby_id: Baby profile ID
-        baby_data: Updated baby information (only provided fields will be updated)
-
-    Returns:
-        Updated baby profile
+    Update a baby's profile
+    
+    Requires authentication. Users can only update their own babies.
     """
-    baby = db.query(Baby).filter(Baby.id == baby_id).first()
-
-    if not baby:
+    db_baby = db.query(Baby).filter(
+        Baby.id == baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
+    if not db_baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {baby_id} not found"
+            detail="Baby not found or you don't have permission to update it"
         )
-
+    
     # Update only provided fields
-    update_data = baby_data.model_dump(exclude_unset=True)
+    update_data = baby_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(baby, field, value)
-
+        setattr(db_baby, field, value)
+    
     db.commit()
-    db.refresh(baby)
-
-    # Manually construct response with computed fields
-    baby_dict = {
-        "id": baby.id,
-        "name": baby.name,
-        "birth_date": baby.birth_date,
-        "weight_kg": baby.weight_kg,
-        "height_cm": baby.height_cm,
-        "allergies": baby.allergies,
-        "dietary_restrictions": baby.dietary_restrictions,
-        "liked_ingredients": baby.liked_ingredients,
-        "disliked_ingredients": baby.disliked_ingredients,
-        "created_at": baby.created_at,
-        "age_months": baby.get_age_months(),
-        "age_stage": baby.get_age_stage()
-    }
-
-    return BabyResponse(**baby_dict)
+    db.refresh(db_baby)
+    
+    return db_baby
 
 
 @router.delete("/{baby_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_baby(
-        baby_id: int,
-        db: Session = Depends(get_db)
+    baby_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Delete a baby profile and all associated feedbacks.
-
-    Args:
-        baby_id: Baby profile ID
+    Delete a baby profile
+    
+    Requires authentication. Users can only delete their own babies.
     """
-    baby = db.query(Baby).filter(Baby.id == baby_id).first()
-
-    if not baby:
+    db_baby = db.query(Baby).filter(
+        Baby.id == baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
+    if not db_baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {baby_id} not found"
+            detail="Baby not found or you don't have permission to delete it"
         )
-
-    db.delete(baby)
+    
+    db.delete(db_baby)
     db.commit()
-
+    
     return None

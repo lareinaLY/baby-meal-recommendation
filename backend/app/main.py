@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.routes import babies, recipes, recommendations
+from app.api.routes import auth, babies, recipes, recommendations
 
 
 # Create FastAPI application
@@ -35,6 +35,30 @@ def startup_event():
 
 
 # Include routers
+app.include_router(
+    auth.router,
+    prefix=f"{settings.API_PREFIX}/auth",
+    tags=["Authentication"]
+)
+
+app.include_router(
+    babies.router,
+    prefix=f"{settings.API_PREFIX}/babies",
+    tags=["Babies"]
+)
+
+app.include_router(
+    recipes.router,
+    prefix=f"{settings.API_PREFIX}/recipes",
+    tags=["Recipes"]
+)
+
+app.include_router(
+    recommendations.router,
+    prefix=f"{settings.API_PREFIX}/recommendations",
+    tags=["Recommendations"]
+)
+
 app.include_router(
     babies.router,
     prefix=f"{settings.API_PREFIX}/babies",

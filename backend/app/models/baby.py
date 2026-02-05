@@ -1,71 +1,59 @@
 """
-Baby profile model for storing infant information and preferences.
+Baby model - Updated with user relationship
 """
-from sqlalchemy import Column, Integer, String, Date, Float, JSON
+from sqlalchemy import Column, Integer, String, Float, Date, JSON, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import date
-
+from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 from app.core.database import Base
 
 
 class Baby(Base):
-    """
-    Represents a baby profile in the system.
-    Stores basic info, health data, and taste preferences.
-    """
+    """Baby profile model"""
     __tablename__ = "babies"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)  # NEW
     name = Column(String, nullable=False)
     birth_date = Column(Date, nullable=False)
-
-    # Health information
-    weight_kg = Column(Float)  # Current weight in kilograms
-    height_cm = Column(Float)  # Current height in centimeters
-    allergies = Column(JSON, default=list)  # List of allergens to avoid
-
-    # Dietary preferences and restrictions
-    dietary_restrictions = Column(JSON, default=list)  # e.g., ["vegetarian", "no_dairy"]
-    liked_ingredients = Column(JSON, default=list)  # Ingredients baby enjoys
-    disliked_ingredients = Column(JSON, default=list)  # Ingredients baby dislikes
-
-    # Ingredients tried with feedback
-    tried_ingredients = Column(JSON, default=dict)  # e.g., # {"carrot": {"attempts": 3, "accepted": 1, "last_try": "2024-01-10", "methods_tried": ["pureed", "steamed"], "methods_liked": ["roasted"]}}
-
-    # Metadata
-    created_at = Column(Date, default=date.today)
+    weight_kg = Column(Float, nullable=True)
+    height_cm = Column(Float, nullable=True)
+    allergies = Column(JSON, default=list)
+    liked_ingredients = Column(JSON, default=list)
+    disliked_ingredients = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    user = relationship("User", back_populates="babies")  # NEW
     feedbacks = relationship("Feedback", back_populates="baby", cascade="all, delete-orphan")
 
-    def get_age_months(self) -> int:
-        """Calculate baby's age in months."""
+    @property
+    def age_months(self) -> int:
+        """Calculate baby's age in months"""
         today = date.today()
-        months = (today.year - self.birth_date.year) * 12 + today.month - self.birth_date.month
-        return months
+        delta = relativedelta(today, self.birth_date)
+        return delta.years * 12 + delta.months
+    
+    @property
+    def age_months(self) -> int:
+        """Calculate baby's age in months"""
+        today = date.today()
+        delta = relativedelta(today, self.birth_date)
+        return delta.years * 12 + delta.months
 
-    def get_age_stage(self) -> str:
-        """
-        Determine developmental stage based on age.
-
-        Stages:
-        - 4-6 months: introduction to solids
-        - 6-8 months: pureed foods
-        - 8-10 months: mashed foods
-        - 10-12 months: chopped foods
-        - 12+ months: family foods
-        """
-        months = self.get_age_months()
-
-        if months < 4:
-            return "milk_only"
-        elif months < 6:
-            return "introduction"
-        elif months < 8:
-            return "pureed"
-        elif months < 10:
-            return "mashed"
+    @property
+    def age_stage(self) -> str:
+        """Get baby's developmental stage"""
+        months = self.age_months
+        if months < 6:
+            return "early_infancy"
         elif months < 12:
-            return "chopped"
+            return "late_infancy"
+        elif months < 24:
+            return "toddler"
         else:
-            return "family_foods"
+            return "preschooler"
+
+    def __repr__(self):
+        return f"<Baby {self.name}, {self.age_months} months>"

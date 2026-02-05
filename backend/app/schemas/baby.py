@@ -2,7 +2,7 @@
 Pydantic schemas for Baby API requests and responses.
 """
 from pydantic import BaseModel, Field
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -30,7 +30,6 @@ class BabyUpdate(BaseModel):
     weight_kg: Optional[float] = Field(None, gt=0, le=30)
     height_cm: Optional[float] = Field(None, gt=0, le=150)
     allergies: Optional[list[str]] = None
-    dietary_restrictions: Optional[list[str]] = None
     liked_ingredients: Optional[list[str]] = None
     disliked_ingredients: Optional[list[str]] = None
 
@@ -38,7 +37,7 @@ class BabyUpdate(BaseModel):
 class BabyResponse(BabyBase):
     """Schema for baby profile response."""
     id: int
-    created_at: date
+    created_at: datetime
     age_months: int  # Computed field
     age_stage: str  # Computed field
 

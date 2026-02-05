@@ -373,7 +373,6 @@ Baby Profile:
 - Age: {baby.get_age_months()} months ({baby.get_age_stage()} stage)
 - Weight: {baby.weight_kg}kg, Height: {baby.height_cm}cm
 - Allergies: {', '.join(baby.allergies) if baby.allergies else 'None'}
-- Dietary restrictions: {', '.join(baby.dietary_restrictions) if baby.dietary_restrictions else 'None'}
 - Favorite foods: {', '.join(baby.liked_ingredients) if baby.liked_ingredients else 'Still exploring'}
 
 Your role:
