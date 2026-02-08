@@ -366,53 +366,71 @@ Stage 3: AI Enhancement (LLM)
 ```
 baby-meal-recommendation/
 ├── backend/
-│   ├── alembic/                    # Database migrations
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── v1/                 # API v1 routes
-│   │   │   │   ├── babies.py
-│   │   │   │   ├── recipes.py
-│   │   │   │   └── recommendations.py
+│   │   │   ├── routes/              # API route handlers
+│   │   │   │   ├── auth.py          # Authentication endpoints
+│   │   │   │   ├── babies.py        # Baby management endpoints
+│   │   │   │   ├── recipes.py       # Recipe CRUD endpoints
+│   │   │   │   └── recommendations.py # Recommendation & AI endpoints
+│   │   │   └── __init__.py
 │   │   ├── core/
-│   │   │   ├── config.py           # Configuration
-│   │   │   └── database.py         # DB connection
-│   │   ├── models/                 # SQLAlchemy models
-│   │   │   ├── baby.py
-│   │   │   ├── recipe.py
-│   │   │   └── feedback.py
-│   │   ├── schemas/                # Pydantic schemas
-│   │   └── services/               # Business logic
-│   │       ├── recommendation_engine.py
-│   │       ├── smart_recommendation_engine.py
-│   │       └── ai_assistant.py
-│   ├── tests/                      # Backend tests
-│   ├── seed_database.py            # Seed data
-│   ├── requirements.txt
-│   └── .env.example
+│   │   │   ├── auth.py              # JWT & password utilities
+│   │   │   ├── config.py            # App configuration
+│   │   │   └── database.py          # DB connection & session
+│   │   ├── models/                  # SQLAlchemy ORM models
+│   │   │   ├── user.py              # User authentication model
+│   │   │   ├── baby.py              # Baby profile model
+│   │   │   ├── recipe.py            # Recipe model
+│   │   │   └── feedback.py          # Feedback tracking model
+│   │   ├── schemas/                 # Pydantic request/response schemas
+│   │   │   ├── user.py              # User & auth schemas
+│   │   │   ├── baby.py              # Baby schemas
+│   │   │   ├── recipe.py            # Recipe schemas
+│   │   │   ├── feedback.py          # Feedback schemas
+│   │   │   └── smart_recommendation.py # AI feature schemas
+│   │   ├── services/                # Business logic
+│   │   │   ├── recommendation_engine.py      # Rule-based engine
+│   │   │   ├── smart_recommendation_engine.py # AI-enhanced engine
+│   │   │   ├── llm_service.py                # OpenAI GPT integration
+│   │   │   └── preference_handler.py         # Intelligent preferences
+│   │   └── main.py                  # FastAPI app entry point
+│   ├── data/
+│   │   └── seed_recipes.json        # Seed data for recipes
+│   ├── tests/                       # Backend tests
+│   │   └── test_api.py
+│   ├── requirements.txt             # Python dependencies
+│   ├── seed_database.py             # Database seeding script
+│   ├── Dockerfile                   # Docker configuration
+│   └── .env.example                 # Environment variables template
 │
 ├── frontend/
-│   ├── public/                     # Static assets
+│   ├── public/                      # Static assets
+│   │   └── vite.svg
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── BabySelector.jsx   # Baby profile selector
-│   │   │   ├── ChatInterface.jsx   # AI chat UI
-│   │   │   ├── NutritionDashboard.jsx  # Charts & analytics
-│   │   │   ├── SmartRecommendations.jsx # Meal cards
-│   │   │   └── FeedbackButtons.jsx # Like/dislike buttons
+│   │   │   ├── Login.jsx            # Login/Register page
+│   │   │   ├── BabySelector.jsx     # Baby profile selector
+│   │   │   ├── ChatInterface.jsx    # AI chat UI
+│   │   │   ├── NutritionDashboard.jsx # Charts & analytics
+│   │   │   ├── SmartRecommendations.jsx # Meal recommendation cards
+│   │   │   └── FeedbackButtons.jsx  # Like/dislike buttons
 │   │   ├── services/
-│   │   │   └── api.js              # API client
-│   │   ├── App.jsx                 # Main app
-│   │   ├── main.jsx                # Entry point
-│   │   └── index.css               # Global styles
+│   │   │   ├── api.js               # API client for backend
+│   │   │   └── auth.js              # Authentication service
+│   │   ├── App.jsx                  # Main app with auth routing
+│   │   ├── main.jsx                 # React entry point
+│   │   └── index.css                # Global styles
 │   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── .env.example
+│   ├── vite.config.js               # Vite configuration
+│   ├── tailwind.config.js           # Tailwind CSS config
+│   ├── postcss.config.js
+│   └── eslint.config.js
 │
-├── docker-compose.yml              # Docker setup
-├── .gitignore                      # Git ignore rules
-├── test_gitignore.sh              # Test .gitignore
-└── README.md
+├── docker-compose.yml               # Docker Compose setup
+├── .gitignore                       # Git ignore rules
+├── test_gitignore.sh               # Test .gitignore script
+└── README.md                        # This file
 ```
 
 ---
@@ -723,7 +741,7 @@ Transitioning from liberal arts to software engineering, focusing on:
 - Domain-specific software solutions
 
 **Contact**: lu.y7@northeastern.edu  
-**LinkedIn**: https://www.linkedin.com/in/yinglulareina/  
+**LinkedIn**: https://www.linkedin.com/in/yinglulareina/
 
 ---
 
