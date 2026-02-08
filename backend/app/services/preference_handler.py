@@ -94,9 +94,9 @@ class PreferenceHandler:
         Calculate preference penalty instead of binary filter.
         
         Strategy:
-        - First rejection: 0.7× penalty (still recommend, but lower)
-        - Second rejection: 0.4× penalty
-        - Third rejection: 0.1× penalty (nearly filtered)
+        - First rejection: 0.7x penalty (still recommend, but lower)
+        - Second rejection: 0.4x penalty
+        - Third rejection: 0.1x penalty (nearly filtered)
         - BUT: Never completely filter (always give chance to retry)
         
         Args:
@@ -158,7 +158,7 @@ class PreferenceHandler:
                 return False, f"Too soon (only {days_since} days since last try)"
             
             # More lenient retry for older babies
-            baby_age = baby.get_age_months()
+            baby_age = baby.age_months
             if baby_age > 10 and days_since >= 30:
                 return True, "Baby is older, tastes may have changed"
         
@@ -202,7 +202,7 @@ class PreferenceHandler:
         for alt_ingredient in alternatives:
             # Query recipes containing this alternative
             recipes = self.db.query(Recipe).filter(
-                Recipe.age_min_months <= baby.get_age_months()
+                Recipe.age_min_months <= baby.age_months
             ).all()
             
             for recipe in recipes:
@@ -246,7 +246,7 @@ class PreferenceHandler:
         """
         # Query all recipes with this ingredient
         recipes = self.db.query(Recipe).filter(
-            Recipe.age_min_months <= baby.get_age_months()
+            Recipe.age_min_months <= baby.age_months
         ).all()
         
         matching_recipes = []
@@ -286,8 +286,8 @@ class PreferenceHandler:
         # Build context for LLM
         context = {
             "ingredient": disliked_ingredient,
-            "baby_age": baby.get_age_months(),
-            "baby_stage": baby.get_age_stage(),
+            "baby_age": baby.age_months,
+            "baby_stage": baby.age_stage,
             "attempt_count": attempt_count,
             "liked_ingredients": baby.liked_ingredients or [],
             "nutrition_importance": self._get_nutrition_importance(disliked_ingredient)
@@ -408,6 +408,27 @@ class PreferenceHandler:
             "strategy": strategies.get(min(attempt_count, 5), strategies[5]),
             "rationale": "Progressive exposure approach"
         }
+    
+    def _get_fallback_alternatives(
+        self,
+        ingredient: str,
+        nutrition_group: Optional[str]
+    ) -> List[Dict[str, str]]:
+        """Fallback alternatives when LLM unavailable."""
+        if not nutrition_group:
+            return []
+        
+        alternatives_list = PreferenceHandler.NUTRITION_GROUPS.get(nutrition_group, [])
+        
+        return [
+            {
+                "ingredient": alt,
+                "reason": f"Similar nutrition to {ingredient}",
+                "preparation_tip": "Steam or puree for easy digestion"
+            }
+            for alt in alternatives_list[:3]
+            if alt.lower() != ingredient.lower()
+        ]
 
 
 class LLMAlternativeSuggester:
@@ -438,7 +459,7 @@ class LLMAlternativeSuggester:
         prompt = f"""You are an infant nutrition expert. A baby rejected {ingredient}.
 
 Baby Profile:
-- Age: {baby.get_age_months()} months ({baby.get_age_stage()} stage)
+- Age: {baby.age_months} months ({baby.age_stage} stage)
 - Already likes: {', '.join(baby.liked_ingredients) if baby.liked_ingredients else 'still exploring'}
 - Rejection reason: {reason}
 
@@ -496,10 +517,10 @@ Format as JSON:
         - Carrot hidden in banana muffins
         - Fresh carrot juice mixed with apple
         """
-        prompt = f"""A {baby.get_age_months()}-month-old baby rejected {ingredient} prepared as {rejected_method}.
+        prompt = f"""A {baby.age_months}-month-old baby rejected {ingredient} prepared as {rejected_method}.
 
 Suggest 3 different preparation methods for {ingredient} that:
-1. Are suitable for {baby.get_age_stage()} stage
+1. Are suitable for {baby.age_stage} stage
 2. Offer different taste/texture than {rejected_method}
 3. Are practical for busy parents
 4. Preserve nutritional value
@@ -545,24 +566,3 @@ Format as JSON:
         }
         
         return roles.get(nutrition_group, "Important for balanced nutrition")
-    
-    def _get_fallback_alternatives(
-        self,
-        ingredient: str,
-        nutrition_group: Optional[str]
-    ) -> List[Dict[str, str]]:
-        """Fallback alternatives when LLM unavailable."""
-        if not nutrition_group:
-            return []
-        
-        alternatives_list = PreferenceHandler.NUTRITION_GROUPS.get(nutrition_group, [])
-        
-        return [
-            {
-                "ingredient": alt,
-                "reason": f"Similar nutrition to {ingredient}",
-                "preparation_tip": "Steam or puree for easy digestion"
-            }
-            for alt in alternatives_list[:3]
-            if alt.lower() != ingredient.lower()
-        ]

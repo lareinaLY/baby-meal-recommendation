@@ -15,6 +15,35 @@ const api = axios.create({
     },
 });
 
+// Add token to all requests
+api.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem('baby_meal_token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
+// Handle 401 errors (token expired)
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            // Token expired, clear it
+            localStorage.removeItem('baby_meal_token');
+            localStorage.removeItem('baby_meal_user');
+            // Reload page to show login
+            window.location.reload();
+        }
+        return Promise.reject(error);
+    }
+);
+
 // Error handler
 const handleError = (error) => {
     if (error.response) {

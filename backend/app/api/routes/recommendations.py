@@ -1,12 +1,14 @@
 """
 API routes for recipe recommendations and feedback management.
-Includes both basic (MVP) and AI-enhanced endpoints.
+Includes both basic (MVP) and AI-enhanced endpoints with user authentication.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional, Any
 
 from app.core.database import get_db
+from app.core.auth import get_current_user
+from app.models.user import User
 from app.models.baby import Baby
 from app.models.recipe import Recipe
 from app.models.feedback import Feedback
@@ -41,7 +43,7 @@ from app.schemas.smart_recommendation import (
 # Original engine
 from app.services.recommendation_engine import RecommendationEngine
 
-# New AI-enhanced services (will create these)
+# New AI-enhanced services
 try:
     from app.services.smart_recommendation_engine import SmartRecommendationEngine
     from app.services.llm_service import LLMService
@@ -49,25 +51,27 @@ try:
     SMART_FEATURES_AVAILABLE = True
 except ImportError:
     SMART_FEATURES_AVAILABLE = False
-    print("⚠️  Smart features not available. Install dependencies and create service files.")
+    print("Warning: Smart features not available. Install dependencies and create service files.")
 
 
 router = APIRouter()
 
 
 # ============================================================================
-# BASIC ENDPOINTS (MVP - Original, Keep these)
+# BASIC ENDPOINTS (MVP - Original with authentication)
 # ============================================================================
 
 @router.post("/", response_model=List[RecipeWithScore])
 def get_recommendations(
     request: RecommendationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get basic rule-based recipe recommendations.
     
     This is the MVP endpoint - fast, no LLM calls, no API key needed.
+    Requires authentication. Users can only get recommendations for their own babies.
     
     Args:
         request: Recommendation parameters (baby_id, count, meal_type, etc.)
@@ -75,12 +79,16 @@ def get_recommendations(
     Returns:
         List of recommended recipes with scores and basic explanations
     """
-    # Verify baby exists
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     # Get recommendations using original engine
@@ -136,11 +144,14 @@ def get_recommendations(
 @router.post("/feedback", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
 def submit_feedback(
     feedback_data: FeedbackCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Submit feedback for a recommended recipe.
     This feedback is used to improve future recommendations.
+    
+    Requires authentication. Users can only submit feedback for their own babies.
     
     Args:
         feedback_data: Feedback information including rating and acceptance
@@ -148,12 +159,16 @@ def submit_feedback(
     Returns:
         Created feedback with computed score
     """
-    # Verify baby exists
-    baby = db.query(Baby).filter(Baby.id == feedback_data.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == feedback_data.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {feedback_data.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     # Verify recipe exists
@@ -195,10 +210,13 @@ def get_baby_feedbacks(
     baby_id: int,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get all feedbacks for a specific baby.
+    
+    Requires authentication. Users can only access feedbacks for their own babies.
     
     Args:
         baby_id: Baby profile ID
@@ -208,12 +226,16 @@ def get_baby_feedbacks(
     Returns:
         List of feedbacks with scores
     """
-    # Verify baby exists
-    baby = db.query(Baby).filter(Baby.id == baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     feedbacks = db.query(Feedback).filter(
@@ -246,11 +268,14 @@ def get_baby_feedbacks(
 def update_feedback(
     feedback_id: int,
     feedback_data: FeedbackUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update an existing feedback.
     Useful when parent initially rejects but later tries the recipe.
+    
+    Requires authentication. Users can only update their own feedbacks.
     
     Args:
         feedback_id: Feedback ID
@@ -265,6 +290,18 @@ def update_feedback(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Feedback with id {feedback_id} not found"
+        )
+    
+    # Verify the feedback's baby belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == feedback.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
+    if not baby:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to update this feedback"
         )
     
     # Update only provided fields
@@ -297,10 +334,13 @@ def update_feedback(
 @router.delete("/feedback/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_feedback(
     feedback_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete a feedback entry.
+    
+    Requires authentication. Users can only delete their own feedbacks.
     
     Args:
         feedback_id: Feedback ID
@@ -313,6 +353,18 @@ def delete_feedback(
             detail=f"Feedback with id {feedback_id} not found"
         )
     
+    # Verify the feedback's baby belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == feedback.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
+    if not baby:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete this feedback"
+        )
+    
     db.delete(feedback)
     db.commit()
     
@@ -320,13 +372,14 @@ def delete_feedback(
 
 
 # ============================================================================
-# AI-ENHANCED ENDPOINTS (Phase 2 - New)
+# AI-ENHANCED ENDPOINTS (Phase 2 - New with authentication)
 # ============================================================================
 
 @router.post("/smart", response_model=SmartRecommendationResponse)
 def get_smart_recommendations(
     request: RecommendationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get AI-enhanced recommendations with intelligent preference handling.
@@ -337,7 +390,7 @@ def get_smart_recommendations(
     - Retry strategies for rejected foods
     - Overall nutrition analysis
     
-    Requires: OPENAI_API_KEY environment variable
+    Requires: OPENAI_API_KEY environment variable and authentication
     
     Args:
         request: Recommendation parameters
@@ -351,12 +404,16 @@ def get_smart_recommendations(
             detail="Smart features not available. Check service files and dependencies."
         )
     
-    # Verify baby exists
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     # Initialize services
@@ -382,13 +439,16 @@ def get_smart_recommendations(
 @router.post("/alternatives", response_model=AlternativesForIngredient)
 def get_ingredient_alternatives(
     request: AlternativeRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get nutritional alternatives for a disliked ingredient.
     
     Example: Baby dislikes spinach (iron source)
     Returns: Red lentils, beef, fortified cereal (other iron sources)
+    
+    Requires authentication.
     
     Args:
         request: Disliked ingredient and baby ID
@@ -402,12 +462,16 @@ def get_ingredient_alternatives(
             detail="Smart features not available"
         )
     
-    # Verify baby exists
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     # Initialize services
@@ -421,16 +485,14 @@ def get_ingredient_alternatives(
         reason=request.reason
     )
     
-    # Format response
-    # Note: This needs to be adapted based on actual return format
-    # from handle_disliked_ingredient
     return result
 
 
 @router.post("/retry-strategy")
 def get_retry_strategy(
     request: RetryStrategyRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get intelligent retry strategy for a disliked ingredient.
@@ -439,6 +501,8 @@ def get_retry_strategy(
     - Different preparation methods
     - Mixing strategies
     - Optimal retry timing
+    
+    Requires authentication.
     
     Args:
         request: Ingredient and baby ID
@@ -452,11 +516,16 @@ def get_retry_strategy(
             detail="Smart features not available"
         )
     
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     llm_service = LLMService()
@@ -502,12 +571,14 @@ def get_retry_strategy(
 @router.post("/chat", response_model=ChatResponse)
 def chat_with_ai(
     request: ChatRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Chat with AI nutrition assistant.
     
     Context-aware: Automatically includes baby's profile and history.
+    Requires authentication.
     
     Args:
         request: Chat message with conversation history
@@ -521,11 +592,16 @@ def chat_with_ai(
             detail="Smart features not available"
         )
     
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     llm_service = LLMService()
@@ -545,14 +621,15 @@ def chat_with_ai(
     
     return ChatResponse(
         message=response,
-        suggested_actions=None  # Could parse response for action suggestions
+        suggested_actions=None
     )
 
 
 @router.post("/weekly-plan", response_model=Dict)
 def generate_weekly_plan(
     request: WeeklyPlanRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate AI-powered weekly meal plan.
@@ -562,6 +639,8 @@ def generate_weekly_plan(
     - Age-appropriate recipes
     - Variety in ingredients
     - Allergen avoidance
+    
+    Requires authentication.
     
     Args:
         request: Baby ID and preferences
@@ -575,11 +654,16 @@ def generate_weekly_plan(
             detail="Smart features not available"
         )
     
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     llm_service = LLMService()
@@ -597,7 +681,8 @@ def generate_weekly_plan(
 def get_nutrition_analysis(
     baby_id: int,
     days: int = 7,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get AI-powered nutrition analysis for recent meals.
@@ -606,6 +691,8 @@ def get_nutrition_analysis(
     - Nutrient totals vs recommended intake
     - Deficiencies or excesses
     - Personalized suggestions
+    
+    Requires authentication.
     
     Args:
         baby_id: Baby ID
@@ -620,11 +707,16 @@ def get_nutrition_analysis(
             detail="Smart features not available"
         )
     
-    baby = db.query(Baby).filter(Baby.id == baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     # Get recent meals from feedback
@@ -634,7 +726,7 @@ def get_nutrition_analysis(
     recent_feedbacks = db.query(Feedback).filter(
         Feedback.baby_id == baby_id,
         Feedback.recommended_at >= cutoff_date,
-        Feedback.prepared == True  # Only count meals that were actually prepared
+        Feedback.prepared == True
     ).all()
     
     # Get recipes
@@ -684,12 +776,12 @@ def get_nutrition_analysis(
     # Identify deficiencies and excesses
     deficiencies = [
         nutrient for nutrient, total in nutrient_totals.items()
-        if total < nutrient_targets[nutrient] * 0.7  # Less than 70% of target
+        if total < nutrient_targets[nutrient] * 0.7
     ]
     
     excesses = [
         nutrient for nutrient, total in nutrient_totals.items()
-        if total > nutrient_targets[nutrient] * 1.5  # More than 150% of target
+        if total > nutrient_targets[nutrient] * 1.5
     ]
     
     return NutritionAnalysisResponse(
@@ -698,7 +790,7 @@ def get_nutrition_analysis(
         nutrient_totals=nutrient_totals,
         nutrient_targets=nutrient_targets,
         assessment=analysis,
-        recommendations=analysis,  # LLM already includes recommendations
+        recommendations=analysis,
         deficiencies=deficiencies,
         excesses=excesses
     )
@@ -707,7 +799,8 @@ def get_nutrition_analysis(
 @router.post("/adapt-recipe", response_model=RecipeAdaptationResponse)
 def adapt_recipe(
     request: RecipeAdaptationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Adapt a recipe based on specific needs.
@@ -716,6 +809,8 @@ def adapt_recipe(
     - "Make this dairy-free"
     - "Increase iron content"
     - "Simplify for beginner cook"
+    
+    Requires authentication.
     
     Args:
         request: Recipe ID, baby ID, and adaptation request
@@ -736,11 +831,16 @@ def adapt_recipe(
             detail=f"Recipe with id {request.recipe_id} not found"
         )
     
-    baby = db.query(Baby).filter(Baby.id == request.baby_id).first()
+    # Verify baby exists and belongs to current user
+    baby = db.query(Baby).filter(
+        Baby.id == request.baby_id,
+        Baby.user_id == current_user.id
+    ).first()
+    
     if not baby:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Baby with id {request.baby_id} not found"
+            detail="Baby not found or you don't have permission to access it"
         )
     
     # Get adapted recipe from LLM

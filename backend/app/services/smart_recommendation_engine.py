@@ -34,20 +34,20 @@ class SmartRecommendationEngine:
         Returns dict matching SmartRecommendationResponse schema.
         """
         print(f"\n{'='*60}")
-        print(f"Smart Recommendations for {baby.name} ({baby.get_age_months()} months)")
+        print(f"Smart Recommendations for {baby.name} ({baby.age_months} months)")
         print(f"{'='*60}")
         
         # Get primary recommendations
         primary_recs = self._get_primary_recommendations(baby, count, meal_type)
-        print(f"✓ Primary recommendations: {len(primary_recs)}")
+        print(f"Primary recommendations: {len(primary_recs)}")
         
         # Get alternatives for disliked ingredients
         alternatives = self._get_alternatives_for_dislikes(baby)
-        print(f"✓ Alternatives for: {list(alternatives.keys())}")
+        print(f"Alternatives for: {list(alternatives.keys())}")
         
         # Get retry suggestions
         retry_suggestions = self._get_retry_suggestions(baby)
-        print(f"✓ Retry suggestions: {len(retry_suggestions)}")
+        print(f"Retry suggestions: {len(retry_suggestions)}")
         
         # Generate overall explanation
         if self.llm_service:
@@ -55,9 +55,9 @@ class SmartRecommendationEngine:
                 overall_explanation = self._generate_overall_explanation(
                     baby, primary_recs, alternatives
                 )
-                print(f"✓ LLM explanation generated")
+                print(f"LLM explanation generated")
             except Exception as e:
-                print(f"⚠️ LLM explanation failed: {e}")
+                print(f"LLM explanation failed: {e}")
                 overall_explanation = f"Personalized recommendations for {baby.name}."
         else:
             overall_explanation = f"Personalized recommendations for {baby.name} based on age and preferences."
@@ -90,7 +90,7 @@ class SmartRecommendationEngine:
         print(f"  Rule engine returned {len(candidates)} candidates")
         
         if not candidates:
-            print("  ⚠️ No candidates! Check database has recipes.")
+            print("  No candidates! Check database has recipes.")
             return []
         
         enhanced_recommendations = []
@@ -112,7 +112,7 @@ class SmartRecommendationEngine:
                         recipe, baby, reason
                     )
                 except Exception as e:
-                    print(f"    ⚠️ LLM failed for {recipe.name}: {e}")
+                    print(f"    LLM failed for {recipe.name}: {e}")
                     explanation = reason
             else:
                 explanation = reason
@@ -174,7 +174,7 @@ class SmartRecommendationEngine:
                         reason="baby_refused"
                     )
                 except Exception as e:
-                    print(f"    ⚠️ LLM alternatives failed: {e}")
+                    print(f"    LLM alternatives failed: {e}")
                     llm_suggestions = []
             else:
                 llm_suggestions = []
@@ -222,7 +222,7 @@ class SmartRecommendationEngine:
                             disliked, baby, attempt_count
                         )
                     except Exception as e:
-                        print(f"    ⚠️ Retry strategy generation failed: {e}")
+                        print(f"    Retry strategy generation failed: {e}")
                         retry_strategy = {"strategy": "Try different preparation", "rationale": "Progressive exposure"}
                 else:
                     retry_strategy = {"strategy": "Try different preparation", "rationale": "Progressive exposure"}
@@ -294,7 +294,7 @@ class SmartRecommendationEngine:
         
         summary_prompt = f"""Summarize this meal recommendation strategy for parents.
 
-Baby: {baby.name}, {baby.get_age_months()} months
+Baby: {baby.name}, {baby.age_months} months
 
 Today's recommendations ({len(primary_recs)} recipes):
 {chr(10).join(f"- {rec['recipe']['name']}" for rec in primary_recs[:5])}
@@ -313,5 +313,5 @@ Keep it encouraging and parent-friendly."""
             )
             return response.choices[0].message.content
         except Exception as e:
-            print(f"⚠️ LLM explanation failed: {e}")
+            print(f"LLM explanation failed: {e}")
             return f"Personalized recommendations for {baby.name} based on nutritional needs and preferences."

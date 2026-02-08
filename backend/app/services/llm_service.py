@@ -65,7 +65,7 @@ class LLMService:
 
 Baby Profile:
 - Name: {baby.name}
-- Age: {baby.get_age_months()} months ({baby.get_age_stage()} stage)
+- Age: {baby.age_months} months ({baby.age_stage} stage)
 - Weight: {baby.weight_kg}kg
 - Allergies: {', '.join(baby.allergies) if baby.allergies else 'None'}
 - Likes: {', '.join(baby.liked_ingredients) if baby.liked_ingredients else 'exploring new foods'}
@@ -163,8 +163,8 @@ Return JSON:
         """
         # Build context
         context = f"""Baby Context:
-- {baby.name}, {baby.get_age_months()} months old
-- Current stage: {baby.get_age_stage()}
+- {baby.name}, {baby.age_months} months old
+- Current stage: {baby.age_stage}
 - Allergies: {', '.join(baby.allergies) if baby.allergies else 'None'}
 """
         
@@ -216,10 +216,10 @@ Keep response under 150 words. Always end with: "Note: Consult your pediatrician
         """
         preferences = preferences or {}
         
-        prompt = f"""Generate a 7-day meal plan for a {baby.get_age_months()}-month-old baby.
+        prompt = f"""Generate a 7-day meal plan for a {baby.age_months}-month-old baby.
 
 Baby Profile:
-- Stage: {baby.get_age_stage()}
+- Stage: {baby.age_stage}
 - Allergies: {', '.join(baby.allergies) if baby.allergies else 'None'}
 - Preferences: {', '.join(baby.liked_ingredients) if baby.liked_ingredients else 'None specified'}
 
@@ -272,7 +272,7 @@ Original Recipe: {recipe.name}
 Ingredients: {[ing['name'] for ing in recipe.ingredients]}
 Instructions: {recipe.instructions}
 
-Baby: {baby.get_age_months()} months, {baby.get_age_stage()} stage
+Baby: {baby.age_months} months, {baby.age_stage} stage
 Allergies: {', '.join(baby.allergies) if baby.allergies else 'None'}
 
 Adaptation Request: {adaptation_request}
@@ -321,7 +321,7 @@ Format as JSON:
         
         prompt = f"""Analyze the nutritional trends for this baby's diet.
 
-Baby: {baby.name}, {baby.get_age_months()} months old
+Baby: {baby.name}, {baby.age_months} months old
 
 Meals in {time_period} ({len(recent_meals)} meals):
 {chr(10).join(f"- {r.name}: Iron {r.iron_mg}mg, Protein {r.protein_g}g, Calcium {r.calcium_mg}mg" for r in recent_meals[:10])}
@@ -331,10 +331,10 @@ Aggregate totals:
 - Total protein: {total_protein:.1f}g  
 - Total calcium: {total_calcium:.1f}mg
 
-Recommended weekly intake for {baby.get_age_months()}-month-old:
-- Iron: 77mg (11mg/day × 7)
-- Protein: 77g (11g/day × 7)
-- Calcium: 1820mg (260mg/day × 7)
+Recommended weekly intake for {baby.age_months}-month-old:
+- Iron: 77mg (11mg/day x 7)
+- Protein: 77g (11g/day x 7)
+- Calcium: 1820mg (260mg/day x 7)
 
 Provide:
 1. Assessment of current nutrition (adequate/deficient/excessive)
@@ -370,7 +370,7 @@ Keep under 100 words."""
         system_prompt = f"""You are a certified infant nutrition assistant for {baby.name}.
 
 Baby Profile:
-- Age: {baby.get_age_months()} months ({baby.get_age_stage()} stage)
+- Age: {baby.age_months} months ({baby.age_stage} stage)
 - Weight: {baby.weight_kg}kg, Height: {baby.height_cm}cm
 - Allergies: {', '.join(baby.allergies) if baby.allergies else 'None'}
 - Favorite foods: {', '.join(baby.liked_ingredients) if baby.liked_ingredients else 'Still exploring'}

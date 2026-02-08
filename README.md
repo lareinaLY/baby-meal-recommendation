@@ -37,7 +37,7 @@ While ChatGPT can suggest baby meals, this application provides critical advanta
 
 ---
 
-## 🎯 Project Status: Phase 3 Complete - Full-Stack MVP
+## 🎯 Project Status: Phase 4 Complete - Production Ready
 
 **Completed Features:**
 
@@ -65,7 +65,19 @@ While ChatGPT can suggest baby meals, this application provides critical advanta
 - ✅ Baby profile management interface
 - ✅ Feedback system integration
 
-### Phase 4 (Upcoming)
+### Phase 4 (User Authentication & Security) ✅
+- ✅ User registration and login with email/password
+- ✅ JWT token-based authentication (7-day expiration)
+- ✅ Password hashing with bcrypt
+- ✅ Protected API endpoints with user ownership verification
+- ✅ Frontend login/register page with form validation
+- ✅ Automatic token management and injection
+- ✅ Complete data isolation between users
+- ✅ Logout functionality
+
+### Phase 5 (Future Enhancements)
+- ⏳ Token refresh mechanism
+- ⏳ Password reset via email
 - ⏳ Multi-modal support (image recognition for food logging)
 - ⏳ Mobile app (React Native)
 - ⏳ CI/CD pipeline for automated deployment
@@ -120,6 +132,7 @@ cp .env.example .env
 # Edit .env and add your configuration:
 # DATABASE_URL=postgresql://postgres:postgres@localhost:5433/baby_meals
 # OPENAI_API_KEY=sk-proj-your-actual-key-here
+# SECRET_KEY=your-secret-key-for-jwt
 
 # 3. Start database (with Docker)
 cd ..
@@ -153,16 +166,20 @@ cd frontend
 # Install dependencies
 npm install
 
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local and add:
-# VITE_API_BASE_URL=http://localhost:8000
-
 # Start development server
 npm run dev
 ```
 
 The app will be available at `http://localhost:3000`
+
+### First Time Setup
+
+1. Open `http://localhost:3000`
+2. Click "Create Account"
+3. Register with email and password
+4. Login with your credentials
+5. Create a baby profile (currently via Swagger UI at `http://localhost:8000/docs`)
+6. Start using Chat, Recommendations, and Nutrition Analysis!
 
 ---
 
@@ -177,10 +194,19 @@ Once the backend is running:
 
 ### Key Endpoints
 
-#### Baby Management
+#### Authentication
+```
+POST   /api/v1/auth/register         Register new user
+POST   /api/v1/auth/login            Login with email/password
+POST   /api/v1/auth/token            OAuth2 token (for Swagger UI)
+GET    /api/v1/auth/me               Get current user info
+POST   /api/v1/auth/logout           Logout (client-side token removal)
+```
+
+#### Baby Management (Requires Authentication)
 ```
 POST   /api/v1/babies              Create baby profile
-GET    /api/v1/babies              List all babies
+GET    /api/v1/babies              List all babies (user's own only)
 GET    /api/v1/babies/{id}         Get baby details with stats
 PATCH  /api/v1/babies/{id}         Update baby profile
 DELETE /api/v1/babies/{id}         Delete baby profile
@@ -195,14 +221,14 @@ PATCH  /api/v1/recipes/{id}        Update recipe
 DELETE /api/v1/recipes/{id}        Delete recipe
 ```
 
-#### Recommendations (Basic)
+#### Recommendations (Requires Authentication)
 ```
 POST   /api/v1/recommendations                      Get rule-based recommendations
 POST   /api/v1/recommendations/feedback             Submit feedback
 GET    /api/v1/recommendations/feedback/{baby_id}   Get feedback history
 ```
 
-#### AI-Enhanced Features
+#### AI-Enhanced Features (Requires Authentication + OpenAI Key)
 ```
 POST   /api/v1/recommendations/smart                AI-enhanced recommendations
 POST   /api/v1/recommendations/alternatives         Nutritional alternatives
@@ -218,34 +244,57 @@ POST   /api/v1/recommendations/adapt-recipe         Adapt recipes
 
 ### Example 1: Complete Workflow via UI
 
-1. **Create Baby Profile**
+1. **Register/Login**
    - Open http://localhost:3000
-   - Click "Add New Baby"
-   - Enter name, age, preferences, allergies
-   - Click "Create"
+   - Click "Create Account"
+   - Enter email, password (min 6 characters)
+   - Login automatically after registration
 
-2. **Get AI Recommendations**
-   - Select baby from dropdown
+2. **Create Baby Profile**
+   - Currently done via Swagger UI at http://localhost:8000/docs
+   - Navigate to "Babies" section
+   - Click "POST /api/v1/babies/"
+   - Authorize with your credentials first (click green lock icon)
+   - Enter baby information
+   - Click "Execute"
+
+3. **Get AI Recommendations**
+   - In the web app, select baby from dropdown
    - Navigate to "Smart Recommendations" tab
    - Click "Get AI Recommendations"
    - View personalized suggestions with nutrition info
 
-3. **Chat with AI Assistant**
+4. **Chat with AI Assistant**
    - Switch to "Chat Assistant" tab
-   - Ask: "My baby refuses vegetables. What should I do?"
+   - Ask: "What are good iron sources for my baby?"
    - Get instant, personalized advice
 
-4. **Track Nutrition**
-   - Provide feedback on meals (👍/👎 buttons)
+5. **Track Nutrition**
+   - Provide feedback on meals (thumbs up/down buttons)
    - Navigate to "Nutrition Analysis" tab
    - View intake vs targets with visual charts
    - Get AI insights on deficiencies
 
-### Example 2: API Usage
+### Example 2: API Usage with Authentication
 
 ```bash
-# 1. Create baby profile
+# 1. Register user
+curl -X POST "http://localhost:8000/api/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "parent@example.com",
+    "password": "securepass123"
+  }'
+
+# Response includes access_token - save it!
+# {"user": {...}, "access_token": "eyJ...", "token_type": "bearer"}
+
+# 2. Use token for all subsequent requests
+TOKEN="eyJ..."  # Your actual token
+
+# 3. Create baby profile
 curl -X POST "http://localhost:8000/api/v1/babies/" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Emma",
@@ -257,13 +306,15 @@ curl -X POST "http://localhost:8000/api/v1/babies/" \
     "disliked_ingredients": ["carrot"]
   }'
 
-# 2. Get AI-enhanced recommendations
+# 4. Get AI-enhanced recommendations
 curl -X POST "http://localhost:8000/api/v1/recommendations/smart" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"baby_id": 1, "count": 5}'
 
-# 3. Chat with AI assistant
+# 5. Chat with AI assistant
 curl -X POST "http://localhost:8000/api/v1/recommendations/chat" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "baby_id": 1,
@@ -271,8 +322,9 @@ curl -X POST "http://localhost:8000/api/v1/recommendations/chat" \
     "conversation_history": []
   }'
 
-# 4. Analyze nutrition (7 days)
-curl "http://localhost:8000/api/v1/recommendations/nutrition-analysis/1?days=7"
+# 6. Analyze nutrition (7 days)
+curl -X GET "http://localhost:8000/api/v1/recommendations/nutrition-analysis/1?days=7" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
@@ -578,7 +630,9 @@ DATABASE_URL=postgresql://user:password@localhost:5432/baby_meals
 # Application
 API_PREFIX=/api/v1
 DEBUG=True
-SECRET_KEY=your-secret-key-here
+
+# Authentication (IMPORTANT: Change in production!)
+SECRET_KEY=your-secret-key-keep-it-secret-in-production
 
 # OpenAI (Required for AI features)
 OPENAI_API_KEY=sk-proj-your-key-here
@@ -590,10 +644,8 @@ LLM_TEMPERATURE=0.7
 ENABLE_SMART_FEATURES=True
 ```
 
-### Frontend (.env.local)
-```env
-VITE_API_BASE_URL=http://localhost:8000
-```
+### Frontend
+No environment variables needed for local development. Backend API is proxied through Vite.
 
 ---
 
@@ -612,13 +664,27 @@ With simulated user studies:
 
 ## 🔐 Security & Privacy
 
+- ✅ Password hashing with bcrypt (industry standard)
+- ✅ JWT token-based authentication (7-day expiration)
 - ✅ API keys stored in `.env` (never committed to Git)
 - ✅ Comprehensive `.gitignore` tested with `test_gitignore.sh`
-- ✅ Baby profiles stored locally (PostgreSQL)
+- ✅ Baby profiles isolated by user (cannot access other users' data)
+- ✅ All API endpoints protected with authentication
+- ✅ CORS configured for secure cross-origin requests
+- ✅ SQL injection protection via SQLAlchemy ORM
+- ✅ Input validation with Pydantic schemas
 - ✅ OpenAI API calls include minimal PII
 - ✅ No data sent to third parties except OpenAI for processing
-- ✅ Parents control their data (can delete profiles anytime)
+- ✅ Users control their data (can delete profiles anytime)
 - ✅ HTTPS ready for production deployment
+
+**Authentication Flow:**
+1. User registers with email + password
+2. Password hashed with bcrypt before storage
+3. JWT token generated and returned
+4. Frontend stores token in localStorage
+5. All API requests include `Authorization: Bearer <token>` header
+6. Backend verifies token and enforces user ownership
 
 ---
 
@@ -657,7 +723,7 @@ Transitioning from liberal arts to software engineering, focusing on:
 - Domain-specific software solutions
 
 **Contact**: lu.y7@northeastern.edu  
-**LinkedIn**: https://www.linkedin.com/in/yinglulareina/
+**LinkedIn**: https://www.linkedin.com/in/yinglulareina/  
 
 ---
 
@@ -686,5 +752,5 @@ Transitioning from liberal arts to software engineering, focusing on:
 
 ---
 
-**Last Updated**: January 2026  
-**Current Version**: 3.0.0 (Phase 3 - Full-Stack MVP Complete)
+**Last Updated**: February 2026  
+**Current Version**: 4.0.0 (Phase 4 - Production Ready with Authentication)

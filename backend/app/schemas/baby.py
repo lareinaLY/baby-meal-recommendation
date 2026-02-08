@@ -13,7 +13,6 @@ class BabyBase(BaseModel):
     weight_kg: Optional[float] = Field(None, gt=0, le=30)
     height_cm: Optional[float] = Field(None, gt=0, le=150)
     allergies: list[str] = Field(default_factory=list)
-    dietary_restrictions: list[str] = Field(default_factory=list)
     liked_ingredients: list[str] = Field(default_factory=list)
     disliked_ingredients: list[str] = Field(default_factory=list)
 

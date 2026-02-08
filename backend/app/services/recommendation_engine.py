@@ -47,13 +47,13 @@ class RecommendationEngine:
         """
         # Get all eligible recipes
         query = self.db.query(Recipe).filter(
-            Recipe.age_min_months <= baby.get_age_months()
+            Recipe.age_min_months <= baby.age_months
         )
 
         # Filter by age maximum if specified
         query = query.filter(
             (Recipe.age_max_months.is_(None)) |
-            (Recipe.age_max_months >= baby.get_age_months())
+            (Recipe.age_max_months >= baby.age_months)
         )
 
         # Filter by meal type if specified
